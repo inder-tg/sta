@@ -1,4 +1,4 @@
-#' Statistical Seasonal Trend Analysis
+#' Statistical Seasonal Trend Analysis for numeric vector or \code{RasterStack}
 #' 
 #' @param data              numeric vector, matrix or RasterStack object
 #' @param freq              integer with the number of observations per period. See \code{Details}
@@ -16,32 +16,74 @@
 #'                          years will be utilized for STA. See \code{Details}
 #' @param adhocPeriod       numeric vector with the specific observations to be considered in additional
 #'                          statistical analysis. See \code{Details}
-#' @param plot              logical, should STA maps be plotted, default is \code{FALSE}. See \code{Details}
-#' @param significance      numeric, significance level used in additional statistical analysis
+#' @param significance      numeric in the interval (0,1) to assess statistical significance of trend analysis.
+#'                          \code{NULL} by default.                           
 #' @param save              logical, should STA output be saved, default is \code{FALSE}
-#' @param dirToSaveSTA      character with full path name, where the STA maps will be saved, applicable when 
-#'                          \code{save = TRUE}
+#' @param dirToSaveSTA      character with full path name used to save \code{sta} progress report. When 
+#'                          \code{save = TRUE}, \code{sta}'s output is saved on this path.
 #' @param numCores          integer given the number of cores to use; pertinent when \code{data} is a
-#'                          \code{RasterStack} or a \code{matrix}
-#' @param master            character with full path name of a \emph{.tif} file whose extend and \code{\link[raster]{crs}}
-#'                          are used to rasterize \code{sta} output. See \code{Details}
+#'                          RasterStack or a \code{\link[base]{matrix}}
+#'                          
+#' @note STA is based on the following ideas. Let \eqn{y_t} denote the value of a periodic time
+#' series at time-point \eqn{t}. It is well-known that this type of observations can be modeled
+#' as:
+#' 
+#' \eqn{y_t = a_0 + a_1 cos( (2 \pi t)/L - \phi_1) + ... +  a_K cos( (2 \pi K t)/L - \phi_K) + \varepsilon_t}, \eqn{t=1,\ldots,L}.
+#'                 
+#' This model is known as harmonic regression. \eqn{L} denotes the number of observations per period, \eqn{K} is the number of 
+#' harmonics included in the fit, \eqn{a_i}'s and \eqn{\phi_i}'s are called amplitude coefficients and phase angles,
+#' respectively. \eqn{K} can be known empirically. Amplitudes and phase angle can be obtained as the solution of a least-squares
+#' problem. 
+#' 
+#' In vegetation monitoring, amplitudes and phase angles are known as \emph{shape parameters}. In particular,
+#' \eqn{a_0}, \eqn{a_1} and \eqn{a_2} are called \emph{mean} and \emph{annual} and \emph{semiannual} amplitudes, respectively.
+#' Applying the harmonic regression model to observations over \eqn{P} periods of length \eqn{L} each, results
+#' in estimates of shape parameters for each period. Thus, focusing only on amplitudes, \code{\link{sta}} yields
+#' time series of mean, annual and semiannual parameters. A subsequent Mann-Kendall test for trend is performed
+#' on each of these series.
 #' 
 #' @export
 #' 
 #' @examples
+#' sta_marismas <- sta(data=marismas, freq=36)
+#' str(sta_marismas)
+#' plot(sta_marismas)
+#' plot(sta_marismas, significance=0.09)
+#' 
 #' # Use of interAnnualPeriod
-#' sta_wetSeason_21016 <- sta(data = wetlands, freq = 36, interAnnualPeriod = c(2, 10, 16), 
-#'                            plot = TRUE)
-#' str(sta_wetSeason_21016)
+#' sta_21016 <- sta(data = marismas, freq = 36, interAnnualPeriod = c(2, 10, 16))
+#' plot(sta_21016)
 #' 
-#' # Use of adhocPeriod; include all the observations for calculating basic statistics
+#' # Use of intraAnnualPeriod
+#' sta_drySeason_218 <- sta(data = marismas, freq = 36,
+#'                      interAnnualPeriod = 2:18, intraAnnualPeriod = "drySeason")
+#' plot(sta_drySeason_218)
+#' 
+#' # Use of adhocPeriod and significance
 #' adhoc <- list()
-#' beginPeriod <- (1:19-1) * 36
-#' endPeriod <- 1:19 * 36 # adhoc$partial length must be even
-#' adhoc$partial <- c( sapply(1:length(beginPeriod), function(s) c(beginPeriod[s]+1, endPeriod[s]) ) )
-#' adhoc$full <- c( sapply(1:length(beginPeriod), function(s) (beginPeriod[s]+1):endPeriod[s]) )
-#' sta(data = wetlands, freq = 36, adhocPeriod = adhoc, plot = TRUE, significance = 0.05)
+#' beginPeriod <- (1:17) * 36
+#' endPeriod <- 2:18 * 36 
+#' adhoc$partial <- c( sapply(1:length(beginPeriod), 
+#'                  function(s) c(beginPeriod[s]+1, endPeriod[s]) ) )
+#' adhoc$full <- c( sapply(1:length(beginPeriod), 
+#'               function(s) (beginPeriod[s]+1):endPeriod[s]) )
+#' sta_adhoc_218 <- sta(data = marismas, freq = 36, interAnnualPeriod = 2:18,
+#'                  startYear = 2000, endYear = 2018, adhocPeriod = adhoc, significance=0.05)
+#' plot(sta_adhoc_218)
 #' 
+#' # Use of ndmi RasterStack
+#' \donttest{
+#' ndmi_path = system.file("extdata", "ndmi.tif", package = "sta")
+#' ndmiSTACK <- stack(ndmi_path)
+#' dir.create(path=paste0(system.file("extdata", package="sta"), "/output_ndmi"),
+#'           showWarnings=FALSE)
+#' outputDIR = paste0(system.file("extdata", package="sta"), "/output_ndmi")
+#' 
+#' sta_ndmi_21016 <- sta(data = ndmiSTACK, freq = 36,
+#'                   numFreq = 4, delta = 0.2, intraAnnualPeriod = "wetSeason",
+#'                   startYear = 2000, endYear = 2018, interAnnualPeriod = c(2,10,16),
+#'                   save = TRUE, numCores = 2L, dirToSaveSTA = outputDIR)}
+#'  
 #' @importFrom raster rasterToPoints
 #' @importFrom raster writeRaster
 #' @importFrom raster subset
@@ -69,7 +111,7 @@
 #' 
 #' @details When the input is a \code{\link[base]{matrix}}, its first two columns must correspond 
 #' to geographic coordinates. For instance, the matrix resulting from applying \code{\link[raster]{rasterToPoints}} 
-#' to a \emph{RasterStack} follows this rule. 
+#' to a \code{RasterStack} has this format. 
 #' 
 #' \code{freq} must be either 12 (monthly observations), 23 (Landsat annual scale) or 36 (10-day composite)
 #' as this version implements STA for time series with these frequencies.
@@ -80,89 +122,100 @@
 #' provided through \code{adhocPeriod}.
 #' 
 #' When \code{interAnnualPeriod} is not specified and \code{class(data)=numeric},
-#' \code{interAnnualPeriod = 1:(length(data)/freq)}; when \code{class(data)} is either \code{RasterStack} 
-#' or \code{matrix}, \code{interAnnualPeriod = 1:((ncol(data)-2)/freq)}.
+#' \code{interAnnualPeriod = 1:(length(data)/freq)}; when \code{class(data)} is either \code{RasterStack}
+#' or \code{\link[base]{matrix}}, \code{interAnnualPeriod = 1:((ncol(data)-2)/freq)}.
 #' 
 #' Since \code{adhocPeriod} defines an inter annual period "ad-hoc", the specific days of this ad-hoc
 #' season must be known in advance and consequently, the specific time-points (with respect to the 
 #' time series under consideration) must be provided in a numeric vector.
 #' 
-#' When \code{plot=T} and \code{class(data)=numeric}, a generic plot is displayed. The plot area is
-#' divided in four rectangles of equal dimensions using \code{\link[graphics]{layout}}. The rectangle in
-#' the top displays the original time series (gray points) along with the harmonic regression fit (black line)
-#' based on the observations indicated by \code{interAnnualPeriod}, also there are highlighted those
-#' points (red) given by \code{intraAnnualPeriod} or \code{adhocPeriod} which are used to calculate
-#' basic statistics. 
-#' In the rectangle below
-#' the output of the statistical trend analysis (performed with \code{\link[trend]{sens.slope}}) on the 
-#' shape parameter mean is displayed; for this analysis only the years given by \code{interAnnualPeriod} 
-#' are considered; a p-value smaller than \code{significance} is highlighted by displaying this value in red.
-#' In the following two rectangles, similar STA (for annual and semi-annual shape parameters) are displayed.
-#' 
-#' When \code{plot=T} and \code{class(data)} is RasterStack or matrix, a \code{\link[mapview]{mapview}}
-#' object is plotted. This mapview object contains the slope analysis maps of the mean, annual and semi-annual
-#' shape parameters. 
-#' 
 #' When \code{save=T}, a valid \code{dirToSaveSTA} must be provided, that is, this folder should have been
-#' created previously. In this case, the STA output is saved in \code{dirToSaveSTA}. This version
+#' created previously. In this case, \code{sta}'s output is saved on \code{dirToSaveSTA}. This version
 #' saves arrays of STA of the mean, annual and semi-annual parameters (along with their corresponding basic statistics)
 #' in the file \code{sta_matrix_output.RData} inside \code{dirToSaveSTA}. Also, in the same directory,
 #' the file \code{sta_progress.txt} records the progress of the STA process.
 #' 
-#' \code{master} provides the filename (with complete path) of an image free of missing values (\code{NA}).
-#' The extent of this image must coincide with that of the RasterStack under analysis.
-#' 
-#' @note \code{save=T}, \code{dirToSaveSTA}, \code{numCores} and \code{master} are required when \code{data} is either a
-#' RasterStack or a matrix. The aforementioned \emph{basic statistics} are: mean and standard deviation
+#' \code{save=T}, \code{dirToSaveSTA}, \code{numCores} and \code{master} are required when \code{data} is either a
+#' \code{RasterStack} or a \code{\link[base]{matrix}}. The aforementioned basic statistics are: mean and standard deviation
 #' of the time series of annual maximum and minimum as well as the global minima and maxima.
 #' 
-#' @return A list containing a bunch of elements
-#' 
+#' @return When \code{class(data)} is a \code{numeric}, an object of class "staNumeric" containing:
+#' \item{data}{numeric vector}
+#' \item{freq}{integer with the number of observations per period}
+#' \item{startYear}{numeric, time series initial year}
+#' \item{endYear}{numeric, time series last year}
+#' \item{intraAnnualPeriod}{character indicating seasons (wet or dry)}
+#' \item{interAnnualPeriod}{numeric vector indicating the number of years considered in STA}
+#' \item{ts}{time series object; \code{data} in \code{\link[stats]{ts}} format}
+#' \item{fit}{numeric vector with output of \code{\link[geoTS]{haRmonics}}}
+#' \item{sta}{a list containing the following elements:}
+#' \itemize{
+#' \item \code{mean} a list of 12 elements with STA output for shape parameter \emph{mean}
+#' \item \code{annual} a list of 12 elements with STA output for shape parameter \emph{annual}
+#' \item \code{semiannual} a list of 12 elements with STA output for shape parameter \emph{semiannual}
+#' }
+#' \item{significance}{numeric in the interval (0,1) or \code{NULL} when default used}
+#'
+#' When \code{class(data)} is a \code{RasterStack} or a \code{\link[base]{matrix}}, an object of class
+#' "staMatrix" containing:
+#' \item{freq}{integer with the number of observations per period}
+#' \item{daysUsedFit}{integer vector indicating the indices used to fit harmonic regression. see \code{\link[geoTS]{haRmonics}}}
+#' \item{intervalsUsedBasicStats}{numeric vector indicating the indices used on calculation of basic statistics}
+#' \item{sta}{a list containg the following elements:}
+#' \itemize{
+#' \item \code{mean} a matrix of 4 columns with STA output for shape parameter \emph{mean}. First two columns provide geolocation of analyzed pixels, 
+#' third and fourth columns show p-value and slope estimate of STA, respectively
+#' \item \code{mean_basicStats} a matrix of 10 columns with basic statistics for shape parameter \emph{mean}. First two columns provide geolocation of analyzed pixels, 
+#' from third to tenth columns show mean, standard deviation, global minimum, and maximum of minimum values, as well as mean, standard deviation,
+#' global minimum, and maximum of maximum values, respectively
+#' \item \code{annual} a matrix of 4 columns with STA output for shape parameter \emph{annual}. First two columns provide geolocation of analyzed pixels, 
+#' third and fourth columns show p-value and slope estimate of STA, respectively
+#' \item \code{annual_basicStats} a matrix of 10 columns with basic statistics for shape parameter \emph{annual}. First two columns provide geolocation of analyzed pixels, 
+#' from third to tenth columns show mean, standard deviation, global minimum, and maximum of minimum values, as well as mean, standard deviation,
+#' global minimum, and maximum of maximum values, respectively
+#' \item \code{semiannual} a matrix of 4 columns with STA output for shape parameter \emph{semiannual}. First two columns provide geolocation of analyzed pixels, 
+#' third and fourth columns show p-value and slope estimate of STA, respectively
+#' \item \code{semiannual_basicStats} a matrix of 10 columns with basic statistics for shape parameter \emph{semiannual}. First two columns provide geolocation of analyzed pixels, 
+#' from third to tenth columns show mean, standard deviation, global minimum, and maximum of minimum values, as well as mean, standard deviation,
+#' global minimum, and maximum of maximum values, respectively 
+#' }
 #' @references Eastman, R., Sangermano, F., Ghimine, B., Zhu, H., Chen, H., Neeti, N., Cai, Y., Machado E., Crema, S. (2009).
 #' \emph{Seasonal trend analysis of image time series},
 #' International Journal of Remote Sensing, \bold{30(10)}, 2721--2726.
 #' 
-# sta <- function(data, 
-#                 freq, numFreq = 4, delta = 0.2, 
-#                 startYear = 2000, endYear = 2019,
-#                 intraAnnualPeriod = c("wetSeason", "drySeason"), 
-#                 interAnnualPeriod, adhocPeriod = NULL,
-#                 plot = F, significance = NULL){
-sta <- function(data, 
-                freq, numFreq = 4, delta = 0.2, 
-                startYear = 2000, endYear = 2019,
-                intraAnnualPeriod = c("wetSeason", "drySeason"), 
-                interAnnualPeriod, adhocPeriod = NULL,
-                plot = F, significance = NULL,
-                save = F, dirToSaveSTA = NULL, numCores = 20, master = NULL){
+sta <- function(data, freq, numFreq = 4, delta = 0, startYear = 2000, endYear = 2018,
+                intraAnnualPeriod = c("wetSeason", "drySeason"), interAnnualPeriod, adhocPeriod = NULL,
+                significance = NULL, save = FALSE, dirToSaveSTA = NULL, numCores = 20){
 
-  if( !(class(data) == "numeric" | class(data) == "RasterStack" | class(data) == "matrix") ){
+  if( !( inherits(data, "numeric") | inherits(data, "RasterStack") | inherits(data, "matrix") ) ){
     stop("'data' must be either numeric, RasterStack or matrix")
   }
   
-  if( class(data) == "RasterStack" ){
-    if( missing(master) ){
-      message("'master' was not provided, calculating...")
-      master <- getMaster(data)
-    }
+  if( inherits(data, "RasterStack") ){ # class(data) == "RasterStack"
     message("Transferring 'data' to matrix...")
     data <- rasterToPoints(data)
-  }
-  
-  if( class(data) == "matrix" & missing( master ) ){
-    stop("'data' is of matrix class, hence 'master' must be provided")
   }
   
   if( missing(freq) ){
     stop("'freq' must be provided")
   }
   
+  intraAnnualPeriod <- match.arg(intraAnnualPeriod)
+  
   if( missing(interAnnualPeriod) ){
     message("Calculating 'interAnnualPeriod'...")
-    if( class(data) == "numeric" ){
+    if( inherits(data, "numeric") ){ #  class(data) == "numeric"
       interAnnualPeriod <- 1:(length(data)/freq)
     } else {
       interAnnualPeriod <- 1:((ncol(data)-2)/freq)
+    }
+  } else {
+    if( inherits(data, "numeric") ){ #  class(data) == "numeric"
+      if( length(interAnnualPeriod) > length(data)/freq )
+       stop("length(data)/freq must be greater or equal than length(interAnnualPeriod)")
+    } else {
+      if( length(interAnnualPeriod) > (ncol(data)-2)/freq )
+        stop("(ncol(data)-2)/freq must be greater or equal than length(interAnnualPeriod)")
     }
   }
   
@@ -172,26 +225,28 @@ sta <- function(data,
     }
   }
   
-  if( class(data) == "numeric" ){
+  if( inherits(data, "numeric") ){ #class(data) == "numeric"
     message("Calculating output for class numeric...")
-    days <- as.numeric(1:length(data))
-    output <- get.sta.numeric(data = data, days = days,
+    output <- get.sta.numeric(data = data, #days = days,
+                              days = as.numeric(1:length(data)),
                               freq = freq, numFreq = numFreq, delta = delta, 
                               startYear = startYear, endYear = endYear,
-                              intraAnnualPeriod = c("wetSeason", "drySeason"), 
+                              intraAnnualPeriod = intraAnnualPeriod, 
                               interAnnualPeriod = interAnnualPeriod, 
                               adhocPeriod = adhocPeriod)
+    output$significance <- significance
   } else {
     # this is for matrix object
     message("Calculating output for class matrix...")
-    days <- as.numeric(1:(ncol(data)-2))
-    output <- get.sta.matrix(data = data, days = days,
+    output <- get.sta.matrix(data = data, 
+                             days = as.numeric(1:(ncol(data)-2)),
                              freq = freq, numFreq = numFreq, delta = delta,
-                             # startYear = startYear, endYear = endYear,
-                             intraAnnualPeriod = c("wetSeason", "drySeason"),
+                             startYear = startYear, endYear = endYear,
+                             intraAnnualPeriod = intraAnnualPeriod, 
                              interAnnualPeriod = interAnnualPeriod,
                              adhocPeriod = adhocPeriod, 
                              numCores = numCores, dirToSaveSTA = dirToSaveSTA)
+    output$significance <- significance
     
     if( save ){
       if( is.null(dirToSaveSTA) ){
@@ -214,75 +269,45 @@ sta <- function(data,
     } 
   }
   
-  # sta.out <- structure(list(output = output), class = "sta")
-  if(class(data) == "numeric"){
+  if( inherits(data, "numeric") ){# class(data) == "numeric"
     sta.out <- structure(output, class = "staNumeric")
   } else {
     sta.out <- structure(output, class = "staMatrix")
   }
   
-  if( plot ){
-    message("Calculating plots...")
-    
-    if( class(sta.out) == "staNumeric"){
-      plot.staNumeric(x = sta.out, startYear = startYear, endYear = endYear,
-                      interAnnualPeriod = interAnnualPeriod, significance = significance)
-    }
-    
-    if( class(sta.out) == "staMatrix" ){
-      plot.staMatrix(x = sta.out, significance = significance, master = master)
-    }
-    
-  } else {
-    sta.out
-  }
-  
-  # if( plot ){
-  #   message("Calculating plots...")
-  #   plot_sta(output = sta.out, startYear = startYear, endYear = endYear,
-  #            interAnnualPeriod = interAnnualPeriod, significance = significance, master = master)
-  #   # getPlot.sta.matrix(output = output, significance = significance, master = master)
-  #   if( class(sta.out) == "staMatrix" & save == T ){
-  #     # if( missing(master) ){
-  #     #   master <- getMaster()
-  #     # }
-  #     message("Please wait, the 30 raster files associated with this STA are being saved")
-  #     saveMaps(output = sta.out, master = master, dirToSaveSTA = dirToSaveSTA)
-  #   }
-  #   invisible(sta.out)
-  # } else {
-  #   sta.out
-  # }
+  sta.out
 }
-#
+
 #' Plot method for \code{sta} function
 #' 
 #' This function returns a plot
 #' 
 #' @param x                 an object of class "staNumeric"
-#' @param ...               additional plot parameters
-#' @param startYear         numeric, time series initial year                            
-#' @param endYear           numeric, time series last year                            
-#' @param interAnnualPeriod numeric vector indicating the number of years to be considered in STA. For instance,
-#'                          in a 19 years time series, 1:5, indicates that the first five years will be
-#'                          utilized for STA. Similarly, c(2,6,10) indicates that the second, sith and tenth
-#'                          years will be utilized for STA. See \code{\link[sta]{sta}}
-#' @param significance      numeric indicating significance of each shape parameter trend      
+#' @param significance      numeric indicating significance of each shape parameter trend   
+#' @param ...               additional plot parameters    
 #' 
 #' @rdname plot.staNumeric
 #' @method plot staNumeric
 #' @export
 #' 
-#' @seealso \code{\link[sta]{sta}}
-plot.staNumeric <- function(x, ...,  startYear, endYear, interAnnualPeriod,
-                                significance){
+#' @seealso \code{\link{sta}}
+plot.staNumeric <- function(x, 
+                            # startYear, endYear, interAnnualPeriod=1:(length(startYear:endYear)),
+                            significance=NULL, ...){
   
-  years <- startYear:endYear
+  if( !inherits(x, "staNumeric") ){ # class(x) != "staNumeric"
+    stop("'x' must be of class staNumeric")
+  }
+  
+  if(!is.null(significance)){
+    x$significance <- significance
+  }
+  
+  years <- x$startYear:x$endYear
   
   nf <- layout( matrix( c(1, 2, 3, 4), 4, 1, byrow = T ),
                 c(12.5, 12.5, 12.5, 12.5), c(3, 3, 3, 3), T )
   
-  # TEMP <- sta_wetSeason_21016$mean$globalDaysToAnalyze
   begin <- seq(1, length(x$intervalsUsedBasicStats), 2)
   end <- seq(2, length(x$intervalsUsedBasicStats), 2)
   intervals <- c(sapply(1:length(begin), function(s) 
@@ -294,11 +319,11 @@ plot.staNumeric <- function(x, ...,  startYear, endYear, interAnnualPeriod,
   basicAnalysis <- fit
   basicAnalysis[-c(intervals)] <- NA
   
-  ts_output <- ts(x$data, start = c(startYear, 1), end = c(endYear-1, x$freq), 
+  ts_output <- ts(x$data, start = c(x$startYear, 1), end = c(x$endYear, x$freq), 
                   frequency = x$freq)
-  fit_output <- ts(fit, start = c(startYear, 1), end = c(endYear-1, x$freq), 
+  fit_output <- ts(fit, start = c(x$startYear, 1), end = c(x$endYear, x$freq), 
                    frequency = x$freq)
-  basic_output <- ts(basicAnalysis, start = c(startYear, 1), end = c(endYear-1, x$freq), 
+  basic_output <- ts(basicAnalysis, start = c(x$startYear, 1), end = c(x$endYear, x$freq), 
                      frequency = x$freq)
   
   yRan <- range(c(x$data, fit, basicAnalysis), na.rm = T)
@@ -317,18 +342,16 @@ plot.staNumeric <- function(x, ...,  startYear, endYear, interAnnualPeriod,
   plot(basic_output, ylim = yRan,
        type = "p", ylab = "NDMI", xlab = "",
        col = "red", pch = 16)
-  # font.lab = 2,
-  # cex.axis = 5, cex.lab = 5)
-  
+
   # --- MEAN
   
   COLOR <- "black"
-  if(!is.null(significance)){
-    if(x$sta$mean$pval < significance){
+  if(!is.null(x$significance)){
+    if(x$sta$mean$pval < x$significance){
       COLOR <- "red"
     }
   }
-  
+    
   yRan <- range(c(x$sta$mean$harmCoeffs, 
                   x$sta$mean$linearTrend), na.rm = T)
   yRan[1] <- yRan[1] - 0.02
@@ -354,12 +377,12 @@ plot.staNumeric <- function(x, ...,  startYear, endYear, interAnnualPeriod,
   # --- ANNUAL
   
   COLOR <- "black"
-  if(!is.null(significance)){
-    if(x$sta$annual$pval < significance){
+  if(!is.null(x$significance)){
+    if(x$sta$annual$pval < x$significance){
       COLOR <- "red"
     }
   }
-  
+    
   yRan <- range(c(x$sta$annual$harmCoeffs, 
                   x$sta$annual$linearTrend), na.rm = T)
   yRan[1] <- yRan[1] - 0.02
@@ -385,8 +408,8 @@ plot.staNumeric <- function(x, ...,  startYear, endYear, interAnnualPeriod,
   # --- SEMI-ANNUAL
   
   COLOR <- "black"
-  if(!is.null(significance)){
-    if(x$sta$semiannual$pval < significance){
+  if(!is.null(x$significance)){
+    if(x$sta$semiannual$pval < x$significance){
       COLOR <- "red"
     }
   }
@@ -404,8 +427,12 @@ plot.staNumeric <- function(x, ...,  startYear, endYear, interAnnualPeriod,
        xaxt = "n",
        axes = F,
        ylim = yRan, pch = 16, cex = 2, cex.axis = 1.5, cex.lab = 1.5)
-  axis(1, labels = years[interAnnualPeriod],
-       at = 1:length(x$sta$semiannual$harmCoeffs), cex.axis = 1.5)
+  # axis(1, labels = years[interAnnualPeriod],
+  #      at = 1:length(x$sta$semiannual$harmCoeffs), cex.axis = 1.5)
+  axis(1, labels = years[x$interAnnualPeriod],
+       at = 1:length(x$interAnnualPeriod), cex.axis = 1.5)
+  # axis(1, labels = rep("", length(x$sta$semiannual$harmCoeffs)),
+  #      at = 1:length(x$sta$semiannual$harmCoeffs), cex.axis = 1.5)
   RAN <- range(x$sta$semiannual$harmCoeffs)
   axis(2, labels = round(seq(RAN[1], RAN[2], length = 4),2),
        at = seq(RAN[1], RAN[2], length = 4), cex.axis = 1.5)
@@ -414,32 +441,42 @@ plot.staNumeric <- function(x, ...,  startYear, endYear, interAnnualPeriod,
                 "     ", "p-value: ", round(x$sta$semiannual$pval, 3)),
          col.main = COLOR )
 }
-#
+
 #' Plot method for \code{sta} function
 #' 
-#' This function returns a \code{\link[mapview]{mapview}} object
+#' This function displays some maps of \code{\link[mapview]{mapview-class}}
 #' 
 #' @param x                 an object of class "staMatrix"
-#' @param ...               additional plot parameters
 #' @param significance      numeric indicating significance of each shape parameter trend
-#' @param master            character with full path to a \emph{.tif} file which is used to transfer STA
-#'                          output to a raster file.
+#' @param master            RasterLayer used to transfer STA output to raster layers.
+#' @param ...               additional plot parameters
 #' 
 #' @rdname plot.staMatrix
 #' @method plot staMatrix
 #' @export
 #' 
-#' @seealso \code{\link[sta]{sta}}
-plot.staMatrix <- function(x, ..., significance, master){
+#' @seealso \code{\link[sta]{sta}}, \code{\link[sta]{getMaster}}, \code{\link[geoTS]{matrixToRaster}}
+plot.staMatrix <- function(x, significance=NULL, master, ...){
+  if( !inherits(x, "staMatrix") ){ #class(x) != "staMatrix"
+    stop("'x' must be of class staMatrix")
+  }
   
-  m_mean <- matrixToMapview(mat = x$sta$mean, significance = significance,
+  if(!is.null(significance)){
+    x$significance <- significance
+  }
+  
+  if(missing(master)){
+    stop("'master' must be provided")
+  }
+  
+  m_mean <- matrixToMapview(mat = x$sta$mean, significance = x$significance,
                             master = master,
                             color = "Reds", label = "mean")
-  m_annual <- matrixToMapview(mat = x$sta$annual, significance = significance,
+  m_annual <- matrixToMapview(mat = x$sta$annual, significance = x$significance,
                               master = master,
                               color = "Greens", label = "annual")
   m_semiannual <- matrixToMapview(mat = x$sta$semiannual, 
-                                  significance = significance,
+                                  significance = x$significance,
                                   master = master,
                                   color = "Blues", label = "semiAnnual")
   

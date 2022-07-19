@@ -1,0 +1,48 @@
+#' Statistical Trend Analysis (STA) for Time Series of Satellite Imagery
+#' 
+#' STA applies the Mann-Kendall test for trend to the so-called \emph{shape parameters} 
+#' of periodic time series. STA estimates shape parameters via harmonic regression.
+#' STA can handle \code{numeric} time series and \code{RasterStack} of satellite images.
+#' 
+#' Shape parameters is the term used in vegetation monitoring to refer to the amplitudes
+#' and phase angles resulting from fitting a harmonic regression model to time series of 
+#' vegetation indices derived from satellite images. Regardless of its origin, STA can be
+#' applied to any periodic time series which makes this package potentially useful to
+#' other disciplines such as hydrology, climatology and econometrics.
+#' 
+#' @details 
+#' 
+#' With \code{\link{sta}} (the main function of this package) it is possible to perform
+#' the Mann-Kendall test for trend on time series of the three most commonly used 
+#' shape parameters: \emph{mean}, \emph{annual} and \emph{semiannual}. These parameters
+#' are the estimated amplitude coefficients of the aforementioned harmonic regresion
+#' model. This function allows parallel processing to handle large satellite time series
+#' imagery.
+#' 
+#' STA includes the following graphical methods:
+#' \itemize{
+#'    \item \code{\link{plot.staNumeric}}: generic plot displaying \code{\link{sta}}'s output
+#'    for numeric time series.
+#'    
+#'    \item \code{\link{plot.staMatrix}}: maps of \code{\link[mapview]{mapview-class}} displaying
+#'    \code{\link{sta}}'s output for \code{RasterStack}.
+#' }
+#' 
+#' STA include the following datasets:
+#' \itemize{
+#'     \item \code{\link{marismas}}: numeric vector containing 10-day Composite NDMI values
+#'     from 2000 to 2018.
+#'     
+#'     \item \code{\link{ndmi}}: \code{RasterStack} containing 612 spatial subsets of 10-day
+#'     Composite NDMI images acquired from 2001 to 2017.
+#' }
+#' 
+#' @name sta-package
+#' @author Tecuapetla-Gómez, I. \email{itecuapetla@@conabio.gob.mx}
+#' 
+#' @keywords package
+#' @references Eastman, R., Sangermano, F., Ghimire, B., Zhu, H., Chen, H., Neeti, N., Cai, Y., Machado, E.,  Crema, S. (2009).
+#' \emph{Seasonal trend analysis of image time series}, International Journal of Remote Sensing
+#' \bold{30(10)}, 2721--2726.
+#' @docType package
+NULL

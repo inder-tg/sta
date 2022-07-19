@@ -4,13 +4,6 @@ sta.ts <- function(ts, intraAnnualPeriod = c("wetSeason", "drySeason"), adhocPer
                    ampType = c("mean", "annual", "semi-annual"), freq, 
                    numFreq, delta){
   
-  # ts = serieTiempo[3:182] * 1e-4
-  # intraAnnualPeriod = "wetSeason" 
-  # ampType = "mean" 
-  # freq = 36 
-  # numFreq = 4 
-  # delta = 0.2
-
   intraAnnualPeriod <- match.arg(intraAnnualPeriod)
   
   ampType <- match.arg(ampType)
@@ -31,8 +24,6 @@ sta.ts <- function(ts, intraAnnualPeriod = c("wetSeason", "drySeason"), adhocPer
     stop("length(ts) must be a multiple of freq")
   }
   
-  # ts <- df[i,]
-  
   years <- 1:(length(ts)/freq)
   ampCoeffs <- rep(NA, length(ts)/freq)
   trend <- rep(NA, length(ts)/freq)
@@ -50,7 +41,6 @@ sta.ts <- function(ts, intraAnnualPeriod = c("wetSeason", "drySeason"), adhocPer
   trend <- median(ampCoeffs - SENS$estimates * 0:(length(years)-1) ) + SENS$estimates * 0:(length(years)-1)
   
   if(is.null(adhocPeriod)){
-    # basicStats <- getBasicStats(y = harmFit, freq = freq, adhocPeriod = adhocPeriod) 
     basicStats <- getBasicStatsIntra(y = harmFit, freq = freq, intraAnnualPeriod = intraAnnualPeriod)
   } else {
     basicStats <- getBasicStatsAdhoc(y = harmFit, freq = freq, adhocPeriod = adhocPeriod) 
@@ -59,8 +49,6 @@ sta.ts <- function(ts, intraAnnualPeriod = c("wetSeason", "drySeason"), adhocPer
   list(ts = ts, fit = harmFit, freq = freq,
        harmCoeffs = ampCoeffs, linearTrend = trend, 
        slope = SENS$estimates, pval = SENS$p.value,
-       # intraAnnualPeriod = intraAnnualPeriod,
-       # daysUsedinBasicStats = basicStats$daysToAnalyze,
        meanMins = basicStats$min_mean, sdMins = basicStats$min_sd,
        minMins = basicStats$min_min, maxMins = basicStats$min_max,
        meanMaxs = basicStats$max_mean, sdMaxs = basicStats$max_sd,
@@ -76,25 +64,9 @@ sta.matrix <- function(df,
                        adhocPeriod = NULL, freq, numFreq, delta, 
                        numCores = 20, dirToSaveSTA = NULL){
   
-  # df <- data$data
-  # adhocPeriod = adhoc
-  # freq = freq
-  # numFreq = numFreq
-  # delta = delta
-  # numCores = numCores
-  # dirToSaveSTA = dirToSaveSTA
-  
   if( !is.null(adhocPeriod) ){
     intraAnnualPeriod <- NULL
   }
-  
-  # df = data$data
-  # adhocPeriod = adhoc
-  # freq=36
-  # numFreq=4
-  # delta=0.2
-  # numCores=20
-  # intraAnnualPeriod = c("wetSeason", "drySeason")
   
   NROW <- nrow(df)
   NCOL <- ncol(df)
@@ -118,15 +90,15 @@ sta.matrix <- function(df,
   
   if( !is.null(dirToSaveSTA) ){
     reportFileName <- paste0( dirToSaveSTA, "/sta_progress.txt" )
-    file.create(path = reportFileName, showWarnings = F)
-    write( "--- STA began at ---", file = reportFileName, append = T )
-    write( as.character(Sys.time()[1]), file = reportFileName, append = T )
+    file.create(path = reportFileName, showWarnings = FALSE)
+    write( "--- STA began at ---", file = reportFileName, append = TRUE )
+    write( as.character(Sys.time()[1]), file = reportFileName, append = TRUE )
   }
   
   kluster <- parallel::makeCluster(spec = numCores, outfile = "")
   registerDoParallel(kluster)
   
-  output <- foreach(i = 1:NROW, .combine = "rbind", .export = c("sta.ts", "getBasicStatsAdhoc"),
+  output <- foreach(i = 1:NROW, .combine = "rbind", .export = c("sta.ts", "getBasicStatsAdhoc", "getBasicStatsIntra", "getDaysToAnalyze"),
                     .packages = c("raster", "geoTS", "trend") ) %dopar% {
                       getSTA_mean <- sta.ts(df[i,3:NCOL],
                                             intraAnnualPeriod = intraAnnualPeriod, 
@@ -171,8 +143,9 @@ sta.matrix <- function(df,
                     }
   stopCluster(kluster)
   if( !is.null(dirToSaveSTA) ){
-    write( as.character(Sys.time()[1]), file = reportFileName, append = T)
-    write( "--- STA ended at ---", file = reportFileName, append = T)
+    write( as.character(Sys.time()[1]), file = reportFileName, append = TRUE)
+    write("If save = TRUE, output will be saved in this directory shortly", file = reportFileName, append = TRUE)
+    write( "--- STA ended at ---", file = reportFileName, append = TRUE)
   }
   
   mean[, c(3,4)] <- output[,1:2]
@@ -190,35 +163,21 @@ sta.matrix <- function(df,
 }
 
 # input: data, interAnnualPeriod, output: data chopped
-getData <- function(data, freq, interAnnualPeriod){
+getData <- function(data, freq, startYear, endYear, interAnnualPeriod){
   output <- NULL
-  
-  # Commented as this test is ran in sta
-  # if( !(class(data) == "numeric" | class(data) == "RasterStack") ){
-  #   stop("data must be either numeric or RasterStack")
-  # } 
-  
-  # Commented as this test is ran in sta
-  # if(class(data) == "RasterStack"){
-  #   data <- rasterToPoints(data)
-  # }
-  
-  # interAnnualPeriod <- c(2,10,16)
-  # freq <- 36
   
   beginPeriod <- (interAnnualPeriod-1) * freq
   endPeriod <- interAnnualPeriod * freq
 
   yearsToAnalyze <- c(sapply(1:length(beginPeriod), function(s) (beginPeriod[s]+1):endPeriod[s] ))
+  years <- (startYear:endYear)[interAnnualPeriod]
   
-  if(class(data) == "numeric"){
+  if( inherits(data, "numeric") ){# class(data) == "numeric"
     output <- data[yearsToAnalyze]
-    years <- 1:(length(output)/freq)
   }
   
-  if(class(data) == "matrix"){
+  if( inherits(data, "matrix") ){ # class(data) == "matrix"
     output <- data[,yearsToAnalyze+2]
-    years <- 1:((ncol(output)-2)/freq)
   }
   
   list(data = output, analyzedPeriod = yearsToAnalyze, years = years)
@@ -306,7 +265,7 @@ getGlobalDaysUsedBasicStats <- function(intraAnnualPeriod = c("wetSeason", "dryS
   
   if(!is.null(adhocPeriod)){
     
-    if( class(adhocPeriod) != "list" | length(adhocPeriod) != 2 ){
+    if( !inherits(adhocPeriod, "list") | length(adhocPeriod) != 2 ){ # class(adhocPeriod) != "list"
       stop("adhocPeriod must be a list of length 2")
     } else {
       daysToAnalyze <- adhocPeriod$partial
@@ -358,11 +317,9 @@ getBasicStatsIntra <- function(y, freq, intraAnnualPeriod){
 
 getBasicStatsAdhoc <- function(y, freq, adhocPeriod){
   
-  # y <- ts
-  
   years <- 1:(length(y)/freq)
   
-  if( class(adhocPeriod) != "list" | length(adhocPeriod) != 2 ){
+  if( !inherits(adhocPeriod, "list") | length(adhocPeriod) != 2 ){ # class(adhocPeriod) != "list"
     stop("adhocPeriod must be a list of length 2")
   }
   
@@ -386,8 +343,6 @@ getBasicStatsAdhoc <- function(y, freq, adhocPeriod){
 getOutput <- function(data,
                       intraAnnualPeriod, adhocPeriod,
                       freq, numFreq, delta, numCores, dirToSaveSTA){
-                      # globalDaysToAnalyze){
-  
   output <- list()
   
   # -- changing to intraAnnualPeriod, adhocPeriod = NULL
@@ -396,7 +351,7 @@ getOutput <- function(data,
     intraAnnualPeriod <- NULL
   } 
   
-  if(class(data) == "numeric"){
+  if( inherits(data, "numeric") ){ # class(data) == "numeric"
     output$mean <- sta.ts(ts = data,
                           intraAnnualPeriod = intraAnnualPeriod, adhocPeriod = adhocPeriod,
                           ampType = "mean", freq = freq, numFreq = numFreq,
@@ -411,20 +366,7 @@ getOutput <- function(data,
                                 ampType = "semi-annual", freq = freq, numFreq = numFreq, delta = delta)
   }
   
-  if(class(data) == "matrix"){
-    # TEMP <- sta.matrix(df = data,
-    #                    intraAnnualPeriod = intraAnnualPeriod, adhocPeriod = adhocPeriod,
-    #                    freq = freq, numFreq = numFreq, delta = delta, numCores = numCores,
-    #                    dirToSaveSTA = dirToSaveSTA)
-    # output$mean <- TEMP$mean
-    # output$mean_basicStats <- TEMP$mean_basicStats
-    # 
-    # output$annual <- TEMP$annual
-    # output$annual_basicStats <- TEMP$annual_basicStats
-    # 
-    # output$semiannual <- TEMP$semiannual
-    # output$semiannual_basicStats <- TEMP$semiannual_basicStats
-    
+  if( inherits(data, "matrix")){ #  class(data) == "matrix"
     output <- sta.matrix(df = data,
                          intraAnnualPeriod = intraAnnualPeriod, adhocPeriod = adhocPeriod,
                          freq = freq, numFreq = numFreq, delta = delta, numCores = numCores,
@@ -436,15 +378,26 @@ getOutput <- function(data,
 
 get.sta.numeric <- function(data, days,
                             freq, numFreq = 4, delta = 0.2, 
-                            startYear = 2000, endYear = 2019,
+                            startYear = 2000, endYear = 2018,
                             intraAnnualPeriod = c("wetSeason", "drySeason"), 
                             interAnnualPeriod, adhocPeriod = NULL){
   
-  backUp <- data
+  output <- list()
+  output$data <- data # backUp
+  output$freq <- freq
+  output$startYear <- startYear
+  output$endYear <- endYear
   
-  data <- getData(data = data, freq = freq, interAnnualPeriod = interAnnualPeriod)
+  intraAnnualPeriod <- match.arg(intraAnnualPeriod)
+  output$intraAnnualPeriod <- intraAnnualPeriod
+  output$interAnnualPeriod <- interAnnualPeriod
   
-  globalDaysToAnalyze <- getData(data = days, freq = freq, interAnnualPeriod = interAnnualPeriod)
+  data <- getData(data = data, freq = freq, startYear = startYear, endYear = endYear, 
+                  interAnnualPeriod = interAnnualPeriod)
+  
+  # globalDaysToAnalyze <- getData(data = as.numeric(days), freq = freq, interAnnualPeriod = interAnnualPeriod)
+  globalDaysToAnalyze <- getData(data = days, freq = freq, startYear = startYear, endYear = endYear, 
+                                 interAnnualPeriod = interAnnualPeriod)
   
   aux_output <- list()
   
@@ -459,7 +412,8 @@ get.sta.numeric <- function(data, days,
                                 freq = freq, numFreq = numFreq, delta = delta)
   } else {
     aux_output$intervalsUsedBasicStats <- getGlobalDaysUsedBasicStats(adhocPeriod = adhocPeriod,
-                                                                      globalDays = globalDaysToAnalyze$data,
+                                                                      # globalDays = globalDaysToAnalyze$data,
+                                                                      globalDays = 1:(length(startYear:endYear) * freq),
                                                                       years = data$years, freq = freq)
     
     aux_output$sta <- getOutput(data = data$data,
@@ -467,11 +421,6 @@ get.sta.numeric <- function(data, days,
                                 freq = freq, numFreq = numFreq, delta = delta)
   }
   
-  output <- list()
-  output$data <- backUp
-  output$freq <- freq
-  output$startYear <- startYear
-  output$endYear <- endYear
   output$daysUsedFit <- data$analyzedPeriod
   output$intervalsUsedBasicStats <- aux_output$intervalsUsedBasicStats
   
@@ -496,15 +445,16 @@ get.sta.numeric <- function(data, days,
 }
 
 get.sta.matrix <- function(data, days, freq, numFreq = 4, delta = 0.2,
-                           # startYear = startYear, endYear = endYear, 
+                           startYear = startYear, endYear = endYear,
                            intraAnnualPeriod = c("wetSeason", "drySeason"),
                            interAnnualPeriod, adhocPeriod = NULL, 
                            numCores = 20, dirToSaveSTA = NULL){
   
-  # data <- getData(data = data, freq = freq, interAnnualPeriod = interAnnualPeriod)
-  dataAux <- getData(data = data, freq = freq, interAnnualPeriod = interAnnualPeriod)
+  dataAux <- getData(data = data, freq = freq, startYear = startYear, endYear = endYear,
+                     interAnnualPeriod = interAnnualPeriod)
   
-  globalDaysToAnalyze <- getData(data = days, freq = freq, interAnnualPeriod = interAnnualPeriod)
+  globalDaysToAnalyze <- getData(data = days, freq = freq, startYear = startYear, endYear = endYear,
+                                 interAnnualPeriod = interAnnualPeriod)
   
   aux_output <- list()
   if(is.null(adhocPeriod)){
@@ -517,7 +467,8 @@ get.sta.matrix <- function(data, days, freq, numFreq = 4, delta = 0.2,
                                 dirToSaveSTA = dirToSaveSTA, numCores = numCores)
   } else {
     aux_output$intervalsUsedBasicStats <- getGlobalDaysUsedBasicStats(adhocPeriod = adhocPeriod,
-                                                                      globalDays = globalDaysToAnalyze$data,
+                                                                      # globalDays = globalDaysToAnalyze$data,
+                                                                      globalDays = 1:(length(startYear:endYear) * freq),
                                                                       years = dataAux$years, freq = freq)
     aux_output$sta <- getOutput(data = data, adhocPeriod = adhocPeriod,
                                 freq = freq, numFreq = numFreq, delta = delta, 
@@ -531,148 +482,6 @@ get.sta.matrix <- function(data, days, freq, numFreq = 4, delta = 0.2,
   output$sta <- aux_output$sta
   
   output
-}
-
-# 
-getPlot.sta.numeric <- function(output, startYear, endYear, interAnnualPeriod,
-                                significance){
-  
-  years <- startYear:endYear
-
-  nf <- layout( matrix( c(1, 2, 3, 4), 4, 1, byrow = T ),
-                c(12.5, 12.5, 12.5, 12.5), c(3, 3, 3, 3), T )
-  
-  # TEMP <- sta_wetSeason_21016$mean$globalDaysToAnalyze
-  begin <- seq(1, length(output$intervalsUsedBasicStats), 2)
-  end <- seq(2, length(output$intervalsUsedBasicStats), 2)
-  intervals <- c(sapply(1:length(begin), function(s) 
-    output$intervalsUsedBasicStats[begin[s]]:output$intervalsUsedBasicStats[end[s]]))
-  
-  daysForFit <- 1:length(output$data)
-  fit <- rep(NA, length(daysForFit))
-  fit[output$daysUsedFit] <- output$fit
-  basicAnalysis <- fit
-  basicAnalysis[-c(intervals)] <- NA
-  
-  ts_output <- ts(output$data, start = c(startYear, 1), end = c(endYear-1, output$freq), 
-                  frequency = output$freq)
-  fit_output <- ts(fit, start = c(startYear, 1), end = c(endYear-1, output$freq), 
-                   frequency = output$freq)
-  basic_output <- ts(basicAnalysis, start = c(startYear, 1), end = c(endYear-1, output$freq), 
-                     frequency = output$freq)
-  
-  yRan <- range(c(output$data, fit, basicAnalysis), na.rm = T)
-  
-  draw_timeSeries <- c(4.1, 4.5, 1, 2.1)  #  c(5.1, 5.1, 2.1, 2.1)
-  par(mar = draw_timeSeries, cex.axis = 1.5, cex.lab= 1.5, font.lab = 2)
-  plot(ts_output, ylim = yRan,
-       type = "p", ylab = "NDMI", xlab = "", 
-       col = "lightgray", lwd = 4)
-  # cex.axis = 5, cex.lab = 5)
-  par(new=T)
-  plot(fit_output, ylim = yRan, lwd = 2,
-       type = "l", ylab = "NDMI", xlab = "")
-  # cex.axis = 5, cex.lab = 5)
-  par(new=T)
-  plot(basic_output, ylim = yRan,
-       type = "p", ylab = "NDMI", xlab = "",
-       col = "red", pch = 16)
-  # font.lab = 2,
-  # cex.axis = 5, cex.lab = 5)
-  
-  # --- MEAN
-  
-  COLOR <- "black"
-  if(!is.null(significance)){
-    if(output$sta$mean$pval < significance){
-      COLOR <- "red"
-    }
-  }
-  
-  yRan <- range(c(output$sta$mean$harmCoeffs, 
-                  output$sta$mean$linearTrend), na.rm = T)
-  yRan[1] <- yRan[1] - 0.02
-  yRan[2] <- yRan[2] + 0.02
-  # draw_params_trends <- c(5.1, 4.1, 0, 2.1)  #  c(5.1, 5.1, 2.1, 2.1)
-  draw_params_trends <- c(4.1, 4.1, 1, 2.1)  #  c(5.1, 5.1, 2.1, 2.1)
-  par(mar = draw_params_trends)
-  plot(x = 1:length(output$sta$mean$harmCoeffs), 
-       output$sta$mean$harmCoeffs, type = "p", xlab = "", ylab = "mean",
-       xaxt = "n",
-       axes = F,
-       ylim = yRan, pch = 16, cex = 2, cex.axis = 1.5, cex.lab = 1.5)
-  axis(1, labels = rep("", length(output$sta$mean$harmCoeffs)),
-       at = 1:length(output$sta$mean$harmCoeffs), cex.axis = 1.5)
-  RAN <- range((output$sta$mean$harmCoeffs))
-  axis(2, labels = round(seq(RAN[1], RAN[2], length = 4),2),
-       at = seq(RAN[1], RAN[2], length = 4), cex.axis = 1.5)
-  lines(output$sta$mean$linearTrend, lwd = 2)
-  title( paste0("slope: ", round(output$sta$mean$slope, 3),
-                "     ", "p-value: ", round(output$sta$mean$pval, 3)),
-         col.main = COLOR )
-  
-  # --- ANNUAL
-  
-  COLOR <- "black"
-  if(!is.null(significance)){
-    if(output$sta$annual$pval < significance){
-      COLOR <- "red"
-    }
-  }
-  
-  yRan <- range(c(output$sta$annual$harmCoeffs, 
-                  output$sta$annual$linearTrend), na.rm = T)
-  yRan[1] <- yRan[1] - 0.02
-  yRan[2] <- yRan[2] + 0.02
-  # draw_params_trends <- c(5.1, 4.1, 0, 2.1)  #  c(5.1, 5.1, 2.1, 2.1)
-  draw_params_trends <- c(4.1, 4.1, 1, 2.1)  #  c(5.1, 5.1, 2.1, 2.1)
-  par(mar = draw_params_trends)
-  plot(x = 1:length(output$sta$annual$harmCoeffs), 
-       output$sta$annual$harmCoeffs, type = "p", 
-       xlab = "", ylab = "annual",
-       xaxt = "n", axes = F,
-       ylim = yRan, pch = 16, cex = 2, cex.axis = 1.5, cex.lab = 1.5)
-  axis(1, labels = rep("", length(output$sta$annual$harmCoeffs)),
-       at = 1:length(output$sta$annual$harmCoeffs), cex.axis = 1.5)
-  RAN <- range(output$sta$annual$harmCoeffs)
-  axis(2, labels = round(seq(RAN[1], RAN[2], length = 4),2),
-       at = seq(RAN[1], RAN[2], length = 4), cex.axis = 1.5)
-  lines(output$sta$annual$linearTrend, lwd = 2)
-  title( paste0("slope: ", round(output$sta$annual$slope, 3), 
-                "     ", "p-value: ", round(output$sta$annual$pval, 3)),
-         col.main = COLOR)
-  
-  # --- SEMI-ANNUAL
-  
-  COLOR <- "black"
-  if(!is.null(significance)){
-    if(output$sta$semiannual$pval < significance){
-      COLOR <- "red"
-    }
-  }
-  
-  yRan <- range(c(output$sta$semiannual$harmCoeffs, 
-                  output$sta$semiannual$linearTrend), na.rm = T)
-  yRan[1] <- yRan[1] - 0.02
-  yRan[2] <- yRan[2] + 0.02
-  # draw_params_trends <- c(5.1, 4.1, 0, 2.1)  #  c(5.1, 5.1, 2.1, 2.1)
-  draw_params_trends <- c(4.1, 4.1, 1, 2.1)  #  c(5.1, 5.1, 2.1, 2.1)
-  par(mar = draw_params_trends)
-  plot(x = 1:length(output$sta$semiannual$harmCoeffs), 
-       output$sta$semiannual$harmCoeffs,
-       type = "p", xlab = "", ylab = "semi-annual",
-       xaxt = "n",
-       axes = F,
-       ylim = yRan, pch = 16, cex = 2, cex.axis = 1.5, cex.lab = 1.5)
-  axis(1, labels = years[interAnnualPeriod],
-       at = 1:length(output$sta$semiannual$harmCoeffs), cex.axis = 1.5)
-  RAN <- range(output$sta$semiannual$harmCoeffs)
-  axis(2, labels = round(seq(RAN[1], RAN[2], length = 4),2),
-       at = seq(RAN[1], RAN[2], length = 4), cex.axis = 1.5)
-  lines(output$sta$semiannual$linearTrend, lwd = 2)
-  title( paste0("slope: ", round(output$sta$semiannual$slope, 3),
-                "     ", "p-value: ", round(output$sta$semiannual$pval, 3)),
-         col.main = COLOR )
 }
 
 getMapview <- function(mapRaster, colPal, nameLayer, 
@@ -691,50 +500,33 @@ getMapview <- function(mapRaster, colPal, nameLayer,
                              "OpenStreetMap", 
                              "OpenTopoMap"), 
                query.type = typeQuery,
-               label = label,
+               label = label, homebutton = F,
                layer.name = nameLayer, legend = T)
   
   m_rev <- mapview(mapRaster, na.color = "transparent", 
                    col.regions = palTest_rev(256), 
                    map.types = c("Esri.WorldImagery", 
                                  "OpenTopoMap"), 
+                   homebutton = F,
                    layer.name = nameLayer, legend = T)
   
-  m@map[[1]]$calls[[7]]$args[[1]]$labels <- rev(m@map[[1]]$calls[[7]]$args[[1]]$labels)
+  m@map[[1]]$calls[[8]]$args[[1]]$labels <- rev(m@map[[1]]$calls[[8]]$args[[1]]$labels)
   
-  m@map[[1]]$calls[[7]]$args[[1]]$title = "Slope"
+  m@map[[1]]$calls[[8]]$args[[1]]$title = paste0("slope-", nameLayer) #"Slope"
   
-  m@map[[1]]$calls[[7]]$args[[1]]$colors <- m_rev@map[[1]]$calls[[5]]$args[[1]]$colors
+  m@map[[1]]$calls[[8]]$args[[1]]$colors <- m_rev@map[[1]]$calls[[6]]$args[[1]]$colors
   
   m
 }
 
-# matrixToRaster <- function(matrix, raster){
-#   rasterTable <- data.frame(rasterToPoints(raster))
-#   
-#   df <- data.frame(x = rasterTable$x, y = rasterTable$y, values = c(matrix))
-#   
-#   sp::coordinates(df) <- ~ x + y
-#   
-#   sp::gridded(df) <- TRUE
-#   
-#   raster_df <- raster(df)
-#   
-#   raster::projection(raster_df) <- raster::projection(raster)
-#   
-#   raster_df
-# }
-
 matrixToRaster <- function(matrix, raster){
   matrix_TEMP <- data.frame(x = matrix[,1], y = matrix[,2], values = matrix[,3])
   
-  matrix_TEMPCopy <- matrix_TEMP
+  sp::coordinates(matrix_TEMP) <- ~x + y
   
-  sp::coordinates(matrix_TEMPCopy) <- ~x + y
+  sp::gridded(matrix_TEMP) <- TRUE
   
-  sp::gridded(matrix_TEMPCopy) <- TRUE
-  
-  raster_TEMP <- raster(matrix_TEMPCopy)
+  raster_TEMP <- raster(matrix_TEMP)
   
   raster::projection(raster_TEMP) <- raster::projection(raster)
   
@@ -745,47 +537,16 @@ matrixToMapview <- function(mat, significance, master,
                             color = c("Reds", "Greens", "Blues"), 
                             label){
   
-  # mat = output$sta$mean
-  # significance = significance
-  # master = master
-  # color = "Reds"
-  # label = "mean"
-  # copyMat <- mat
-
   color <- match.arg(color)
   
-  # TEMP <- mat[,3]
   if( !is.null(significance) ){
     mat[,3][ mat[,4] >= significance ] <- NA
   }
-  # mat[,3] <- 
-  
+
   RASTER <- matrixToRaster(matrix = mat, raster = master)
   getMapview(mapRaster = RASTER, colPal = brewer.pal(256, color), 
-             nameLayer = label)
+             nameLayer = label, typeQuery = "click")
   
-}
-
-# master must be a full raster
-getPlot.sta.matrix <- function(output, significance, master){
-  
-  # copy <- output
-  # output <- sta.out
-  
-  m_mean <- matrixToMapview(mat = output$sta$mean, significance = significance,
-                            master = master,
-                            color = "Reds", label = "mean")
-  m_annual <- matrixToMapview(mat = output$sta$annual, significance = significance,
-                              master = master,
-                              color = "Greens", label = "annual")
-  m_semiannual <- matrixToMapview(mat = output$sta$semiannual, 
-                                  significance = significance,
-                                  master = master,
-                                  color = "Blues", label = "semiAnnual")
-  
-  maps <- m_mean + m_annual + m_semiannual
-  
-  maps@map
 }
 
 saveMaps <- function(output, master, dirToSaveSTA){
@@ -978,32 +739,23 @@ saveMaps <- function(output, master, dirToSaveSTA){
               overwrite = T)
 }
 
-getMaster <- function(data){
-  STACK <- stack(data)
-  LAYER <- subset(STACK, sample(1:nlayers(data),1))
+#' Get a \code{RasterLayer} with no missing values from a \code{Raster*} object
+#' 
+#' The term \emph{master} refers to a raster layer whose extent and coordinate reference system
+#' are used as a reference to rasterize further objects, e.g. matrices. To rasterize, \emph{master} must be free of missing values.
+#' 
+#' @param x \code{Raster*} object
+#' 
+#' @export
+#' 
+#' @importFrom raster subset
+#' @importFrom raster nlayers
+#' 
+#' @seealso \code{\link[geoTS]{matrixToRaster}}
+#'           
+#' @return \code{RasterLayer}
+getMaster <- function(x){
+  LAYER <- subset(x, sample(1:nlayers(x),1))
   LAYER[is.na(LAYER)] <- 1e4
   LAYER
-}
-
-# Sys.time()
-# getMaster(data=STACK)
-# Sys.time()
-
-# TEMP <- stack("/home/itecuapetla/ameyalli/datapr8/HUMEDALES/Cartografia/ANALISIS_HUMEDAD_AGUA/STA_NDMI_cts/data/ndmi_split/ndmi_1.tif")
-# 
-# 
-# TEMP2 <- stack("/home/itecuapetla/Desktop/R/R_packages/staR_backup/inst/extdata/cell_1.tif")
-
-
-plot_sta <- function(output, startYear = 2000, endYear = 2019, interAnnualPeriod,
-                     significance = NULL, master){
-  if( class(output) == "staNumeric" ){
-    getPlot.sta.numeric(output = output, startYear = startYear, endYear = endYear,
-                        interAnnualPeriod = interAnnualPeriod, significance = significance)
-    # NextMethod()
-  }
-  
-  if( class(output) == "staMatrix" ){
-    getPlot.sta.matrix(output = output, significance = significance, master = master)
-  }
 }
