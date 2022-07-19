@@ -2,6 +2,7 @@
 
 S3method(plot,staMatrix)
 S3method(plot,staNumeric)
+export(getMaster)
 export(sta)
 importFrom(RColorBrewer,brewer.pal)
 importFrom(doParallel,registerDoParallel)
