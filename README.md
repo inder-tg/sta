@@ -1,7 +1,7 @@
 # sta
 
 ## Overview 
-sta provides methos to estimate the so-called shape parameters of periodic time series of satellite imagery. sta stands for Statistical seasonal Trend Analysis. Methods to visualize sta maps are also implemented as well as additional basic statistical analysis. sta maps can be exported in conventional raster formats. 
+sta provides methos to estimate the so-called shape parameters of periodic time series of satellite imagery. sta stands for Statistical seasonal Trend Analysis. Methods to visualize sta maps are implemented as well as routines to get basic stats; sta maps can be exported in conventional raster formats. 
 
 ## Installation
 
