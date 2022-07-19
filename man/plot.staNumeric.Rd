@@ -4,28 +4,18 @@
 \alias{plot.staNumeric}
 \title{Plot method for \code{sta} function}
 \usage{
-\method{plot}{staNumeric}(x, ..., startYear, endYear, interAnnualPeriod,
-  significance)
+\method{plot}{staNumeric}(x, significance = NULL, ...)
 }
 \arguments{
 \item{x}{an object of class "staNumeric"}
 
-\item{...}{additional plot parameters}
-
-\item{startYear}{numeric, time series initial year}
-
-\item{endYear}{numeric, time series last year}
-
-\item{interAnnualPeriod}{numeric vector indicating the number of years to be considered in STA. For instance,
-in a 19 years time series, 1:5, indicates that the first five years will be
-utilized for STA. Similarly, c(2,6,10) indicates that the second, sith and tenth
-years will be utilized for STA. See \code{\link[sta]{sta}}}
-
 \item{significance}{numeric indicating significance of each shape parameter trend}
+
+\item{...}{additional plot parameters}
 }
 \description{
 This function returns a plot
 }
 \seealso{
-\code{\link[sta]{sta}}
+\code{\link{sta}}
 }

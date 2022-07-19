@@ -4,21 +4,20 @@
 \alias{plot.staMatrix}
 \title{Plot method for \code{sta} function}
 \usage{
-\method{plot}{staMatrix}(x, ..., significance, master)
+\method{plot}{staMatrix}(x, significance = NULL, master, ...)
 }
 \arguments{
 \item{x}{an object of class "staMatrix"}
 
-\item{...}{additional plot parameters}
-
 \item{significance}{numeric indicating significance of each shape parameter trend}
 
-\item{master}{character with full path to a \emph{.tif} file which is used to transfer STA
-output to a raster file.}
+\item{master}{RasterLayer used to transfer STA output to raster layers.}
+
+\item{...}{additional plot parameters}
 }
 \description{
-This function returns a \code{\link[mapview]{mapview}} object
+This function displays some maps of \code{\link[mapview]{mapview-class}}
 }
 \seealso{
-\code{\link[sta]{sta}}
+\code{\link[sta]{sta}}, \code{\link[sta]{getMaster}}, \code{\link[geoTS]{matrixToRaster}}
 }
